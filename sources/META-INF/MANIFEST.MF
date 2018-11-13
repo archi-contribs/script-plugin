@@ -22,3 +22,4 @@ Bundle-ClassPath: .,
  lib/antlr-runtime-4.4.jar,
  lib/ST-4.0.8.jar
 Export-Package: org.archicontribs.script
+Automatic-Module-Name: org.archicontribs.script
