@@ -26,14 +26,14 @@ import org.apache.commons.cli.ParseException;
 import org.archicontribs.database.DBScript;
 
 public class ScriptStartup implements IStartup {
-    private boolean         verbose = false;
-    private boolean         debug = false;
-    private String          scriptFilename = null;
-    private IArchimateModel currentModel = null;
-    private boolean         exitArchi = false;
-    private Exception       asyncException = null;
-    private BufferedReader  br = null;
-    private File            report = null;
+    boolean         verbose = false;
+    boolean         debug = false;
+    String          scriptFilename = null;
+    IArchimateModel currentModel = null;
+    boolean         exitArchi = false;
+    Exception       asyncException = null;
+    BufferedReader  br = null;
+    File            report = null;
     
     @Override
     public void earlyStartup() {
@@ -41,7 +41,9 @@ public class ScriptStartup implements IStartup {
         CommandLineParser parser = new DefaultParser();
         CommandLine commandLine = null;
         
-        options.addOption(Option.builder("s").longOpt("script").desc("Script filename").hasArg().argName("script file").required().build());
+        verbose("*** Script plugin initialized");
+        
+        options.addOption(Option.builder("s").longOpt("script").desc("Script filename").hasArg().argName("script file").build());
         options.addOption(Option.builder("v").longOpt("verbose").desc("Prints verbose information on the standard output").build());
         options.addOption(Option.builder("d").longOpt("debug").desc("Prints debug information on the standard output").build());
         options.addOption(Option.builder("l").longOpt("logfile").desc("Specifies the log filename").hasArg().argName("log file").build());
@@ -57,31 +59,34 @@ public class ScriptStartup implements IStartup {
             return;
         }
         
-        verbose = commandLine.hasOption("v");
-        debug = commandLine.hasOption("d");
+        this.verbose = commandLine.hasOption("v");
+        this.debug = commandLine.hasOption("d");
         
         if (commandLine.hasOption("?")) {
             help(options);
             return;
         }
         
-        scriptFilename = commandLine.getOptionValue("s");
+        if ( !commandLine.hasOption("s") ) {
+            verbose("    No script provided. Please use '-?' option for more information.");
+            return;
+        }
         
-        verbose("*** Script plugin initialized");
-        verbose("    Verbose mode  : "+verbose);
-        verbose("    Debug mode    : "+debug);
-        verbose("    Script file   : "+scriptFilename);
+        this.scriptFilename = commandLine.getOptionValue("s");
+        verbose("    Verbose mode  : "+this.verbose);
+        verbose("    Debug mode    : "+this.debug);
+        verbose("    Script file   : "+this.scriptFilename);
         verbose("    DB plugin     : "+(Platform.getBundle("org.archicontribs.database")!=null));
         
-        File script = new File(scriptFilename);
+        File script = new File(this.scriptFilename);
 
         
 
         try {
-            br = new BufferedReader(new FileReader(script));
+            this.br = new BufferedReader(new FileReader(script));
 
             int lineNumber = 0;
-            for ( String line; (line=br.readLine()) != null; ) {
+            for ( String line; (line=this.br.readLine()) != null; ) {
                 ++lineNumber;
                 
                 verbose(String.format("%02d", lineNumber) + " | " + line);
@@ -118,59 +123,58 @@ public class ScriptStartup implements IStartup {
                     }
                 }
             }
-        } catch (FileNotFoundException e) {
-            error(scriptFilename+": not found..");
+        } catch (@SuppressWarnings("unused") FileNotFoundException e) {
+            error(this.scriptFilename+": not found.");
             return;
         } catch (IOException e) {
-            error(scriptFilename+": " + e.getMessage());
+            error(this.scriptFilename+": " + e.getMessage());
             return;
         }
 
         finish();
         
-        if ( exitArchi ) {
+        if ( this.exitArchi ) {
             exitArchi();
         }
     }
     
-    private void help(Options options) {
+    static void help(Options options) {
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp( "Script plugin", options );
         System.out.flush();
     }
     
-    private void verbose(String msg) {
-        if ( verbose ) {
+    void verbose(String msg) {
+        if ( this.verbose ) {
             System.out.println("INFO: " + msg);
             System.out.flush();
         }
     }
     
-    private void debug(String msg) {
-        if ( debug ) {
+    void debug(String msg) {
+        if ( this.debug ) {
             System.out.println("DEBUG: " + msg);
             System.out.flush();
         }
     }
     
-    private void error(String msg) {
+    void error(String msg) {
         error(msg, null);
     }
     
-    private void error(String msg, Exception e) {
-        if ( e == null )
-            System.err.println("ERROR: " + msg);
-        else {
-            System.err.println("ERROR: " + msg + "\n" + e.getMessage());
+    void error(String msg, Exception e) {
+        System.err.println("ERROR: " + msg);
+        if ( e != null ) {
+            System.err.println(e.getMessage());
             e.printStackTrace(System.err);
         }
         System.err.flush();
-        if ( exitArchi ) {
+        if ( this.exitArchi ) {
             exitArchi();
         }
     }
     
-    private String[] parseLine(String line) {
+    static String[] parseLine(String line) {
         final String QUOTES = "\"";
         final String BLANKS = " \t\"";
 
@@ -190,20 +194,20 @@ public class ScriptStartup implements IStartup {
       }
 
     
-    private boolean setOption(int lineNumber, String[] words) {
+    boolean setOption(int lineNumber, String[] words) {
         if ( !checkOptions(lineNumber, words, 3, "OPTION <option name> [ON|OFF]") )
             return false;
         
         if ( words[1].toUpperCase().equals("EXITARCHI") ) {
                 switch ( words[2].toLowerCase() ) {
-                    case "on" : exitArchi = true; break;
-                    case "off": exitArchi = false; break;
+                    case "on" : this.exitArchi = true; break;
+                    case "off": this.exitArchi = false; break;
                     default :
                         error("Line " + lineNumber + ": Syntax error: option flag can only be ON or OFF.\nSyntax: OPTION <option name> [ON|OFF]");
                         return false;
                 }
                 
-                debug("Setting ExitArchi option to " + exitArchi);
+                debug("Setting ExitArchi option to " + this.exitArchi);
                 return true;
         }
         
@@ -211,7 +215,7 @@ public class ScriptStartup implements IStartup {
         return false;
     }
     
-    private boolean selectModel(int lineNumber, String[] words) {
+    boolean selectModel(int lineNumber, String[] words) {
         // the line should have 2 or 5 words
         if ( words.length != 2 && !checkOptions(lineNumber, words, 5, "SELECT <model name> [FROM DATABASE <database name>|FROM FILE <filename>]") )
             return false;
@@ -232,16 +236,16 @@ public class ScriptStartup implements IStartup {
         if ( filename != null )
             file = new File(filename);
         for ( IArchimateModel existingModel: allModels ) {
-            if ( filename == null ) {
+            if ( (filename == null) || (file == null) ) {
                 if ( existingModel.getName().equals(words[1]) ) {
-                    currentModel = existingModel;
+                    this.currentModel = existingModel;
                     return true;
                 }
             } else {
                 File existingFile = existingModel.getFile();
                 try {
                     if ( existingFile!=null && existingFile.getCanonicalPath().equals(file.getCanonicalPath()) ) {
-                        currentModel = existingModel;
+                        this.currentModel = existingModel;
                         return true;
                     }
                 } catch (IOException e) {
@@ -271,13 +275,14 @@ public class ScriptStartup implements IStartup {
                 
                 // we open the model
                 debug("opening the model");
-                asyncException = null;
+                this.asyncException = null;
                 Display.getDefault().syncExec(new Runnable() {
                     @Override public void run() {
-                        currentModel = IEditorModelManager.INSTANCE.openModel(new File(words[4]));
+                        ScriptStartup.this.currentModel = IEditorModelManager.INSTANCE.openModel(new File(words[4]));
                     }
                 });
                 break;
+                
             case "DATABASE":
                 // we check that the database plugin bundle is loaded
                 if ( Platform.getBundle("org.archicontribs.database") == null ) {
@@ -286,62 +291,67 @@ public class ScriptStartup implements IStartup {
                 }
                 
                 // we ask the database plugin to import the model
-                DBScript dbScript = new DBScript();
-                currentModel = null;
-                asyncException = null;
+                this.currentModel = null;
+                this.asyncException = null;
                 Display.getDefault().syncExec(new Runnable() {
                     @Override public void run() {
                         try {
-                            currentModel = dbScript.importModel(words[1], words[4], false);
+                            verbose("Calling Database plugin to import model \""+words[1]+"\" from database \""+words[4]+"\"");
+                            ScriptStartup.this.currentModel = DBScript.importModel(words[1], words[4], false);
                         } catch (Exception e) {
-                            asyncException = e;
+                            ScriptStartup.this.asyncException = e;
                         }
                     }
                 });
+                break;
+                
+             default:
+                 error("Line " + lineNumber + ": unknown keyword \""+words[3]+"\", must be \"FILE\" or \"DATABASE\".");
+                 return false;
         }
         
         // we check if the model has been imported
-        if ( currentModel == null ) {
-            error("Line " + lineNumber + ": import of model failed.", asyncException);
+        if ( this.currentModel == null ) {
+            error("Line " + lineNumber + ": import of model failed.", this.asyncException);
             return false;
         }
 
         return true;
     }
     
-    private boolean closeModel(int lineNumber, String[] words) {
+    boolean closeModel(int lineNumber, String[] words) {
         if ( !checkOptions(lineNumber, words, 1, "CLOSE") )
             return false;
             
-        if ( currentModel == null ) {
+        if ( this.currentModel == null ) {
             error("Line " + lineNumber + ": No model is selected.");
             return false;
         }
         
         // closing the model
-        debug("closing the model");
-        asyncException = null;
+        debug("Closing the model");
+        this.asyncException = null;
         Display.getDefault().syncExec(new Runnable() {
             @Override public void run() {
                 try {
-                    IEditorModelManager.INSTANCE.closeModel(currentModel);
-                    currentModel = null;
+                    IEditorModelManager.INSTANCE.closeModel(ScriptStartup.this.currentModel);
+                    ScriptStartup.this.currentModel = null;
                 } catch (IOException e) {
-                    asyncException = e;
+                    ScriptStartup.this.asyncException = e;
                 }
             }
         });
         
         // we check if the model has been closed
-        if ( currentModel != null ) {
-            error("Line " + lineNumber + ": Closure of model failed.", asyncException);
+        if ( this.currentModel != null ) {
+            error("Line " + lineNumber + ": Closure of model failed.", this.asyncException);
             return false;
         }
         
         return true;
     }
     
-    private boolean reportModel(int lineNumber, String[] words) {
+    boolean reportModel(int lineNumber, String[] words) {
         if ( !checkOptions(lineNumber, words, 4, "REPORT HTML TO <web site path>") )
             return false;
         
@@ -349,30 +359,30 @@ public class ScriptStartup implements IStartup {
             error("Line " + lineNumber + ": Unrecognised keyword \""+words[1]+"\"\nSyntax: REPORT HTML TO <web site path>");
         }
         
-        if ( currentModel == null ) {
+        if ( this.currentModel == null ) {
             error("Line " + lineNumber + ": No model is selected.");
             return false;
         }
         
-        HTMLReportExporter htmlExporter = new HTMLReportExporter(currentModel);
-        asyncException = null;
+        HTMLReportExporter htmlExporter = new HTMLReportExporter(this.currentModel);
+        this.asyncException = null;
         Display.getDefault().syncExec(new Runnable() {
             @Override public void run() {
                 try {
                     verbose("exporting the model");
-                    report = htmlExporter.createReport(new File(words[3]), "index.html");
+                    ScriptStartup.this.report = htmlExporter.createReport(new File(words[3]), "index.html");
                 } catch (IOException e) {
-                    asyncException = e;
+                    ScriptStartup.this.asyncException = e;
                 }
             }
         });
             
-        if ( asyncException != null ) {
-            error("Line " + lineNumber + ": An exception occurred.", asyncException);
+        if ( this.asyncException != null ) {
+            error("Line " + lineNumber + ": An exception occurred.", this.asyncException);
             return false;
         }
         
-        if ( report == null ) {
+        if ( this.report == null ) {
             error("Line " + lineNumber + ": HTML report could not be created.");
             return false;
         }
@@ -380,7 +390,7 @@ public class ScriptStartup implements IStartup {
         return true;
     }
     
-    private boolean checkOptions(int lineNumber, String[] words, int nb, String syntax) {
+    boolean checkOptions(int lineNumber, String[] words, int nb, String syntax) {
         if ( words.length != nb) {
             String errorMsg = (words.length<nb) ? "missing parameter" : "too many parameters";
             error("Line " + lineNumber + ": Syntax error: " + errorMsg + ".\nSyntax: "+syntax);
@@ -389,17 +399,17 @@ public class ScriptStartup implements IStartup {
         return true;
     }
     
-    private void finish() {
+    void finish() {
         verbose ("*** Script plugin has finished");
         try {
-            if ( br != null )
-                br.close();
+            if ( this.br != null )
+                this.br.close();
         } catch (IOException e) {
             error("An exception occurred.", e);
         }
     }
     
-    private void exitArchi() {
+    void exitArchi() {
         verbose ("*** Quitting Archi");
         Display.getDefault().syncExec(new Runnable() {
             @Override public void run() {
